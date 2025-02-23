@@ -23,18 +23,18 @@ function M:spot(job)
 			:area(ui.Pos { "center", w = 60, h = 20 })
 			:row(1)
 			:col(1)
-			:col_style(ui.Style():fg("blue"))
-			:cell_style(ui.Style():fg("yellow"):reverse())
+			:col_style(th.spot.tbl_col)
+			:cell_style(th.spot.tbl_cell)
 			:widths { ui.Constraint.Length(14), ui.Constraint.Fill(1) }
 	)
 end
 
 function M:spot_base(job)
 	local url, cha = job.file.url, job.file.cha
-	local spotter = PLUGIN.spotter(url, job.mime)
-	local previewer = PLUGIN.previewer(url, job.mime)
-	local fetchers = PLUGIN.fetchers(job.file, job.mime)
-	local preloaders = PLUGIN.preloaders(url, job.mime)
+	local spotter = cf.plugin.spotter(url, job.mime)
+	local previewer = cf.plugin.previewer(url, job.mime)
+	local fetchers = cf.plugin.fetchers(job.file, job.mime)
+	local preloaders = cf.plugin.preloaders(url, job.mime)
 
 	for i, v in ipairs(fetchers) do
 		fetchers[i] = v.cmd
