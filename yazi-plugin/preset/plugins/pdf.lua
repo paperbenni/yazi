@@ -11,7 +11,7 @@ function M:peek(job)
 		return
 	end
 
-	ya.sleep(math.max(0, cf.preview.image_delay / 1000 + start - os.clock()))
+	ya.sleep(math.max(0, rt.preview.image_delay / 1000 + start - os.clock()))
 	ya.image_show(cache, job.area)
 	ya.preview_widgets(job, {})
 end
@@ -20,7 +20,7 @@ function M:seek(job)
 	local h = cx.active.current.hovered
 	if h and h.url == job.file.url then
 		local step = ya.clamp(-1, job.units, 1)
-		ya.manager_emit("peek", { math.max(0, cx.active.preview.skip + step), only_if = job.file.url })
+		ya.mgr_emit("peek", { math.max(0, cx.active.preview.skip + step), only_if = job.file.url })
 	end
 end
 
@@ -36,8 +36,8 @@ function M:preload(job)
 			"-f", job.skip + 1,
 			"-l", job.skip + 1,
 			"-singlefile",
-			"-jpeg", "-jpegopt", "quality=" .. cf.preview.image_quality,
-			"-scale-to-x", cf.preview.max_width, "-scale-to-y", "-1",
+			"-jpeg", "-jpegopt", "quality=" .. rt.preview.image_quality,
+			"-scale-to-x", rt.preview.max_width, "-scale-to-y", "-1",
 			tostring(job.file.url),
 			tostring(cache),
 		})
@@ -49,7 +49,7 @@ function M:preload(job)
 	elseif not output.status.success then
 		local pages = tonumber(output.stderr:match("the last page %((%d+)%)")) or 0
 		if job.skip > 0 and pages > 0 then
-			ya.manager_emit("peek", { math.max(0, pages - 1), only_if = job.file.url, upper_bound = true })
+			ya.mgr_emit("peek", { math.max(0, pages - 1), only_if = job.file.url, upper_bound = true })
 		end
 		return true, Err("Failed to convert PDF to image, stderr: %s", output.stderr)
 	end

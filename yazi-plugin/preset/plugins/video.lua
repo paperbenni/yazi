@@ -11,7 +11,7 @@ function M:peek(job)
 		return
 	end
 
-	ya.sleep(math.max(0, cf.preview.image_delay / 1000 + start - os.clock()))
+	ya.sleep(math.max(0, rt.preview.image_delay / 1000 + start - os.clock()))
 	ya.image_show(cache, job.area)
 	ya.preview_widgets(job, {})
 end
@@ -19,7 +19,7 @@ end
 function M:seek(job)
 	local h = cx.active.current.hovered
 	if h and h.url == job.file.url then
-		ya.manager_emit("peek", {
+		ya.mgr_emit("peek", {
 			math.max(0, cx.active.preview.skip + job.units),
 			only_if = job.file.url,
 		})
@@ -29,7 +29,7 @@ end
 function M:preload(job)
 	local percent = 5 + job.skip
 	if percent > 95 then
-		ya.manager_emit("peek", { 90, only_if = job.file.url, upper_bound = true })
+		ya.mgr_emit("peek", { 90, only_if = job.file.url, upper_bound = true })
 		return false
 	end
 
@@ -51,7 +51,7 @@ function M:preload(job)
 	end
 
 	local ss = math.floor(meta.format.duration * percent / 100)
-	local qv = 31 - math.floor(cf.preview.image_quality * 0.3)
+	local qv = 31 - math.floor(rt.preview.image_quality * 0.3)
 	-- stylua: ignore
 	local status, err = Command("ffmpeg"):args({
 		"-v", "quiet", "-threads", 1, "-hwaccel", "auto",
@@ -60,7 +60,7 @@ function M:preload(job)
 		"-i", tostring(job.file.url),
 		"-vframes", 1,
 		"-q:v", qv,
-		"-vf", string.format("scale=-1:'min(%d,ih)':flags=fast_bilinear", cf.preview.max_height),
+		"-vf", string.format("scale=-1:'min(%d,ih)':flags=fast_bilinear", rt.preview.max_height),
 		"-f", "image2",
 		"-y", tostring(cache),
 	}):status()
