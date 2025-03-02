@@ -1,10 +1,10 @@
 const LABEL_NAME = "needs info"
 const RE_VERSION = /Yazi\s+Version\s*:\s\d+\.\d+\.\d+\s\(/gm
 const RE_DEPENDENCIES = /Dependencies\s+[/a-z]+\s*:\s/gm
-const RE_CHECKLIST = /#{3}\s+Checklist\s+(?:^-\s+\[x]\s+.+?\n){2}/gm
+const RE_CHECKLIST = /#{3}\s+Checklist\s+(?:^-\s+\[x]\s+.+?(?:\n|\r\n|$)){2}/gm
 
 function bugReportBody(creator, content, hash) {
-	if (content.includes(` (${hash} `) && RE_CHECKLIST.test(content)) {
+	if (RE_CHECKLIST.test(content) && new RegExp(` \\(${hash}[a-z]? `).test(content)) {
 		return null
 	}
 
@@ -12,7 +12,7 @@ function bugReportBody(creator, content, hash) {
 
 - The bug can still be reproduced on the [newest nightly build](https://yazi-rs.github.io/docs/installation/#binaries).
 - The debug information (\`yazi --debug\`) is updated for the newest nightly.
-- All *required* fields in the checklist have been checked.
+- The *required* fields in the checklist are checked.
 
 Issues with \`${LABEL_NAME}\` will be marked ready once edited with the proper content, or closed after 2 days of inactivity.
 `
@@ -27,7 +27,7 @@ function featureRequestBody(creator, content) {
 
 - The requested feature does not exist in the [newest nightly build](https://yazi-rs.github.io/docs/installation/#binaries).
 - The debug information (\`yazi --debug\`) is updated for the newest nightly.
-- All *required* fields in the checklist have been checked.
+- The *required* fields in the checklist are checked.
 
 Issues with \`${LABEL_NAME}\` will be marked ready once edited with the proper content, or closed after 2 days of inactivity.
 `

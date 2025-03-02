@@ -6,7 +6,7 @@ use yazi_config::popup::InputCfg;
 use yazi_dds::Pubsub;
 use yazi_fs::expand_path;
 use yazi_macro::render;
-use yazi_proxy::{CompletionProxy, InputProxy, ManagerProxy, TabProxy};
+use yazi_proxy::{CmpProxy, InputProxy, MgrProxy, TabProxy};
 use yazi_shared::{Debounce, errors::InputError, event::CmdCow, url::Url};
 
 use crate::tab::Tab;
@@ -72,7 +72,7 @@ impl Tab {
 		}
 
 		Pubsub::pub_from_cd(self.id, self.cwd());
-		ManagerProxy::refresh();
+		MgrProxy::refresh();
 		render!();
 	}
 
@@ -98,7 +98,7 @@ impl Tab {
 						}
 					}
 					Err(InputError::Completed(before, ticket)) => {
-						CompletionProxy::trigger(&before, ticket);
+						CmpProxy::trigger(&before, ticket);
 					}
 					_ => break,
 				}

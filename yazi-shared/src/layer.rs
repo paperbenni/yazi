@@ -7,14 +7,14 @@ use serde::Deserialize;
 pub enum Layer {
 	#[default]
 	App,
-	Manager,
+	Mgr,
 	Tasks,
 	Spot,
 	Pick,
 	Input,
 	Confirm,
 	Help,
-	Completion,
+	Cmp,
 	Which,
 }
 
@@ -22,14 +22,14 @@ impl Display for Layer {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.write_str(match self {
 			Self::App => "app",
-			Self::Manager => "manager",
+			Self::Mgr => "mgr",
 			Self::Tasks => "tasks",
 			Self::Spot => "spot",
 			Self::Pick => "pick",
 			Self::Input => "input",
 			Self::Confirm => "confirm",
 			Self::Help => "help",
-			Self::Completion => "completion",
+			Self::Cmp => "cmp",
 			Self::Which => "which",
 		})
 	}

@@ -27,10 +27,10 @@ impl<'a> Router<'a> {
 		use Layer as L;
 		match layer {
 			L::App => unreachable!(),
-			L::Manager | L::Tasks | L::Spot | L::Pick | L::Input | L::Confirm | L::Help => {
+			L::Mgr | L::Tasks | L::Spot | L::Pick | L::Input | L::Confirm | L::Help => {
 				self.matches(layer, key)
 			}
-			L::Completion => self.matches(L::Completion, key) || self.matches(L::Input, key),
+			L::Cmp => self.matches(L::Cmp, key) || self.matches(L::Input, key),
 			L::Which => cx.which.type_(key),
 		}
 	}
@@ -45,7 +45,7 @@ impl<'a> Router<'a> {
 			if on.len() > 1 {
 				self.app.cx.which.show_with(key, layer);
 			} else {
-				emit!(Seq(ChordCow::from(chord).into_seq(), layer));
+				emit!(Seq(ChordCow::from(chord).into_seq()));
 			}
 			return true;
 		}
