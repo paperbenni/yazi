@@ -1,42 +1,44 @@
-use std::{io::{self, BufWriter, Stderr, stderr}, ops::{Deref, DerefMut}, sync::atomic::{AtomicBool, AtomicU8, Ordering}};
+use std::{io, ops::{Deref, DerefMut}, sync::atomic::{AtomicBool, AtomicU8, Ordering}};
 
 use anyhow::Result;
-use crossterm::{event::{DisableBracketedPaste, EnableBracketedPaste, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags}, execute, queue, style::Print, terminal::{LeaveAlternateScreen, SetTitle, disable_raw_mode, enable_raw_mode}};
+use crossterm::{Command, event::{DisableBracketedPaste, EnableBracketedPaste, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags}, execute, queue, style::Print, terminal::{LeaveAlternateScreen, SetTitle, disable_raw_mode, enable_raw_mode}};
 use cursor::RestoreCursor;
 use ratatui::{CompletedFrame, Frame, Terminal, backend::CrosstermBackend, buffer::Buffer, layout::Rect};
 use yazi_adapter::{Emulator, Mux};
 use yazi_config::{INPUT, MGR};
+use yazi_shared::{SyncCell, tty::{TTY, TtyWriter}};
 
 static CSI_U: AtomicBool = AtomicBool::new(false);
 static BLINK: AtomicBool = AtomicBool::new(false);
 static SHAPE: AtomicU8 = AtomicU8::new(0);
 
 pub(super) struct Term {
-	inner:       Terminal<CrosstermBackend<BufWriter<Stderr>>>,
+	inner:       Terminal<CrosstermBackend<TtyWriter<'static>>>,
 	last_area:   Rect,
 	last_buffer: Buffer,
 }
 
 impl Term {
 	pub(super) fn start() -> Result<Self> {
+		static SKIP: SyncCell<bool> = SyncCell::new(false);
 		let mut term = Self {
-			inner:       Terminal::new(CrosstermBackend::new(BufWriter::new(stderr())))?,
+			inner:       Terminal::new(CrosstermBackend::new(TTY.writer()))?,
 			last_area:   Default::default(),
 			last_buffer: Default::default(),
 		};
 
 		enable_raw_mode()?;
-		if yazi_adapter::TMUX.get() {
+		if SKIP.replace(true) && yazi_adapter::TMUX.get() {
 			yazi_adapter::Mux::tmux_passthrough();
 		}
 
 		execute!(
-			BufWriter::new(stderr()),
+			TTY.writer(),
 			screen::SetScreen(true),
-			Print(Mux::csi("\x1bP$q q\x1b\\")), // Request cursor shape (DECRQSS query for DECSCUSR)
-			Print(Mux::csi("\x1b[?12$p")),      // Request cursor blink status (DECSET)
-			Print("\x1b[?u"),                   // Request keyboard enhancement flags (CSI u)
-			Print(Mux::csi("\x1b[0c")),         // Request device attributes
+			Print("\x1bP$q q\x1b\\"), // Request cursor shape (DECRQSS query for DECSCUSR)
+			Print(Mux::csi("\x1b[?12$p")), // Request cursor blink status (DECSET)
+			Print("\x1b[?u"),         // Request keyboard enhancement flags (CSI u)
+			Print(Mux::csi("\x1b[0c")), // Request device attributes
 			screen::SetScreen(false),
 			EnableBracketedPaste,
 			mouse::SetMouse(true),
@@ -57,13 +59,11 @@ impl Term {
 		);
 
 		if CSI_U.load(Ordering::Relaxed) {
-			queue!(
-				stderr(),
-				PushKeyboardEnhancementFlags(
-					KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-						| KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
-				)
-			)?;
+			PushKeyboardEnhancementFlags(
+				KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+					| KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS,
+			)
+			.write_ansi(&mut TTY.writer())?;
 		}
 
 		term.hide_cursor()?;
@@ -74,11 +74,11 @@ impl Term {
 
 	fn stop(&mut self) -> Result<()> {
 		if CSI_U.swap(false, Ordering::Relaxed) {
-			execute!(stderr(), PopKeyboardEnhancementFlags)?;
+			PopKeyboardEnhancementFlags.write_ansi(&mut TTY.writer())?;
 		}
 
 		execute!(
-			stderr(),
+			TTY.writer(),
 			mouse::SetMouse(false),
 			RestoreCursor,
 			DisableBracketedPaste,
@@ -91,15 +91,15 @@ impl Term {
 
 	pub(super) fn goodbye(f: impl FnOnce() -> bool) -> ! {
 		if CSI_U.swap(false, Ordering::Relaxed) {
-			execute!(stderr(), PopKeyboardEnhancementFlags).ok();
+			PopKeyboardEnhancementFlags.write_ansi(&mut TTY.writer()).ok();
 		}
 
 		if !MGR.title_format.is_empty() {
-			execute!(stderr(), SetTitle("")).ok();
+			execute!(TTY.writer(), SetTitle("")).ok();
 		}
 
 		execute!(
-			stderr(),
+			TTY.writer(),
 			mouse::SetMouse(false),
 			RestoreCursor,
 			SetTitle(""),
@@ -146,9 +146,9 @@ impl Term {
 	pub(super) fn set_cursor_block() -> Result<()> {
 		use crossterm::cursor::SetCursorStyle;
 		Ok(if INPUT.cursor_blink {
-			queue!(stderr(), SetCursorStyle::BlinkingBlock)?
+			queue!(TTY.writer(), SetCursorStyle::BlinkingBlock)?
 		} else {
-			queue!(stderr(), SetCursorStyle::SteadyBlock)?
+			queue!(TTY.writer(), SetCursorStyle::SteadyBlock)?
 		})
 	}
 
@@ -156,9 +156,9 @@ impl Term {
 	pub(super) fn set_cursor_bar() -> Result<()> {
 		use crossterm::cursor::SetCursorStyle;
 		Ok(if INPUT.cursor_blink {
-			queue!(stderr(), SetCursorStyle::BlinkingBar)?
+			queue!(TTY.writer(), SetCursorStyle::BlinkingBar)?
 		} else {
-			queue!(stderr(), SetCursorStyle::SteadyBar)?
+			queue!(TTY.writer(), SetCursorStyle::SteadyBar)?
 		})
 	}
 
@@ -166,9 +166,9 @@ impl Term {
 	pub(super) fn set_cursor_underscore() -> Result<()> {
 		use crossterm::cursor::SetCursorStyle;
 		Ok(if INPUT.cursor_blink {
-			queue!(stderr(), SetCursorStyle::BlinkingUnderScore)?
+			queue!(TTY.writer(), SetCursorStyle::BlinkingUnderScore)?
 		} else {
-			queue!(stderr(), SetCursorStyle::SteadyUnderScore)?
+			queue!(TTY.writer(), SetCursorStyle::SteadyUnderScore)?
 		})
 	}
 }
@@ -178,7 +178,7 @@ impl Drop for Term {
 }
 
 impl Deref for Term {
-	type Target = Terminal<CrosstermBackend<BufWriter<Stderr>>>;
+	type Target = Terminal<CrosstermBackend<TtyWriter<'static>>>;
 
 	fn deref(&self) -> &Self::Target { &self.inner }
 }

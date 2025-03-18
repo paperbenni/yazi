@@ -5,7 +5,7 @@ use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
 use tokio_util::sync::CancellationToken;
 use yazi_adapter::ADAPTOR;
 use yazi_config::PLUGIN;
-use yazi_fs::{Cha, File, Files, FilesOp};
+use yazi_fs::{File, Files, FilesOp, cha::Cha};
 use yazi_macro::render;
 use yazi_plugin::{external::Highlighter, isolate, utils::PreviewLock};
 use yazi_shared::{MIME_DIR, url::Url};
@@ -32,11 +32,7 @@ impl Preview {
 		};
 
 		self.abort();
-		if previewer.sync {
-			isolate::peek_sync(&previewer.run, file, mime, self.skip);
-		} else {
-			self.previewer_ct = Some(isolate::peek(&previewer.run, file, mime, self.skip));
-		}
+		self.previewer_ct = isolate::peek(&previewer.run, file, mime, self.skip);
 	}
 
 	pub fn go_folder(&mut self, file: File, dir: Option<Cha>, force: bool) {

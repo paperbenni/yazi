@@ -4,9 +4,9 @@ yazi_macro::mod_pub!(keymap mgr open plugin popup preview tasks theme which);
 
 yazi_macro::mod_flat!(layout pattern preset priority);
 
-use std::str::FromStr;
+use std::{io::{Read, Write}, str::FromStr};
 
-use yazi_shared::{RoCell, SyncCell};
+use yazi_shared::{RoCell, SyncCell, tty::TTY};
 
 pub static KEYMAP: RoCell<keymap::Keymap> = RoCell::new();
 pub static MGR: RoCell<mgr::Mgr> = RoCell::new();
@@ -27,18 +27,6 @@ pub fn init() -> anyhow::Result<()> {
 		wait_for_key(e)?;
 		try_init(false)?;
 	}
-
-	// TODO: remove this
-	for c in KEYMAP.mgr.iter().flat_map(|c| c.run.iter()) {
-		if c.name == "arrow"
-			&& c.first_str().unwrap_or_default().parse::<isize>().is_ok_and(|n| n <= -999 || n >= 999)
-		{
-			eprintln!("Deprecated command: `arrow -99999999` and `arrow 99999999` have been deprecated, please use `arrow top` and `arrow bot` instead, in your `keymap.toml`.
-
-See #2294 for more details: https://github.com/sxyazi/yazi/pull/2294");
-		}
-	}
-
 	Ok(())
 }
 
@@ -93,14 +81,16 @@ fn try_init(merge: bool) -> anyhow::Result<()> {
 }
 
 fn wait_for_key(e: anyhow::Error) -> anyhow::Result<()> {
-	eprintln!("{e}");
+	let stdout = &mut *TTY.lockout();
+
+	writeln!(stdout, "{e}")?;
 	if let Some(src) = e.source() {
-		eprintln!("\nCaused by:\n{src}");
+		writeln!(stdout, "\nCaused by:\n{src}")?;
 	}
 
 	use crossterm::style::{Attribute, Print, SetAttributes};
 	crossterm::execute!(
-		std::io::stderr(),
+		stdout,
 		SetAttributes(Attribute::Reverse.into()),
 		SetAttributes(Attribute::Bold.into()),
 		Print("Press <Enter> to continue with preset settings..."),
@@ -108,6 +98,6 @@ fn wait_for_key(e: anyhow::Error) -> anyhow::Result<()> {
 		Print("\n"),
 	)?;
 
-	std::io::stdin().read_line(&mut String::new())?;
+	TTY.reader().read_exact(&mut [0])?;
 	Ok(())
 }

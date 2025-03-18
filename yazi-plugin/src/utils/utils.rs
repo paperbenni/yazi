@@ -8,6 +8,7 @@ pub fn compose(lua: &Lua, isolate: bool) -> mlua::Result<Value> {
 	Composer::make(lua, 45, move |lua, key| {
 		match key {
 			// App
+			b"id" => Utils::id(lua)?,
 			b"hide" => Utils::hide(lua)?,
 
 			// Cache
@@ -59,7 +60,6 @@ pub fn compose(lua: &Lua, isolate: bool) -> mlua::Result<Value> {
 			b"target_family" => Utils::target_family(lua)?,
 
 			// Text
-			b"md5" => Utils::hash(lua, true)?, // TODO: deprecate this in the future
 			b"hash" => Utils::hash(lua, false)?,
 			b"quote" => Utils::quote(lua)?,
 			b"truncate" => Utils::truncate(lua)?,

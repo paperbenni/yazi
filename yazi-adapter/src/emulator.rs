@@ -1,13 +1,13 @@
-use std::{io::{LineWriter, stderr}, time::Duration};
+use std::{io::BufWriter, time::Duration};
 
 use anyhow::Result;
 use crossterm::{cursor::{RestorePosition, SavePosition}, execute, style::Print, terminal::{disable_raw_mode, enable_raw_mode}};
 use scopeguard::defer;
 use tokio::time::sleep;
 use tracing::{debug, error, warn};
-use yazi_shared::Either;
+use yazi_shared::{Either, tty::{Handle, TTY}};
 
-use crate::{Adapter, AsyncStdin, Brand, Mux, TMUX, Unknown};
+use crate::{Adapter, Brand, Mux, TMUX, Unknown};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Emulator {
@@ -33,7 +33,7 @@ impl Emulator {
 		};
 
 		execute!(
-			LineWriter::new(stderr()),
+			TTY.writer(),
 			SavePosition,
 			Print(kgp_seq),             // Detect KGP
 			Print(Mux::csi("\x1b[>q")), // Request terminal version
@@ -75,39 +75,41 @@ impl Emulator {
 
 	pub fn move_lock<F, T>((x, y): (u16, u16), cb: F) -> Result<T>
 	where
-		F: FnOnce(&mut std::io::BufWriter<std::io::StderrLock>) -> Result<T>,
+		F: FnOnce(&mut BufWriter<Handle>) -> Result<T>,
 	{
 		use std::{io::Write, thread, time::Duration};
 
 		use crossterm::{cursor::{Hide, MoveTo, RestorePosition, SavePosition, Show}, queue};
 
-		let mut buf = std::io::BufWriter::new(stderr().lock());
+		let mut w = TTY.lockout();
 
 		// I really don't want to add this,
 		// But tmux and ConPTY sometimes cause the cursor position to get out of sync.
 		if TMUX.get() || cfg!(windows) {
-			execute!(buf, SavePosition, MoveTo(x, y), Show)?;
-			execute!(buf, MoveTo(x, y), Show)?;
-			execute!(buf, MoveTo(x, y), Show)?;
+			execute!(w, SavePosition, MoveTo(x, y), Show)?;
+			execute!(w, MoveTo(x, y), Show)?;
+			execute!(w, MoveTo(x, y), Show)?;
 			thread::sleep(Duration::from_millis(1));
 		} else {
-			queue!(buf, SavePosition, MoveTo(x, y))?;
+			queue!(w, SavePosition, MoveTo(x, y))?;
 		}
 
-		let result = cb(&mut buf);
+		let result = cb(&mut w);
 		if TMUX.get() || cfg!(windows) {
-			queue!(buf, Hide, RestorePosition)?;
+			queue!(w, Hide, RestorePosition)?;
 		} else {
-			queue!(buf, RestorePosition)?;
+			queue!(w, RestorePosition)?;
 		}
 
-		buf.flush()?;
+		w.flush()?;
 		result
 	}
 
 	pub fn read_until_da1() -> String {
+		let now = std::time::Instant::now();
 		let h = tokio::spawn(Self::error_to_user());
-		let (buf, result) = AsyncStdin::default().read_until(Duration::from_millis(500), |b, buf| {
+
+		let (buf, result) = TTY.read_until(Duration::from_millis(500), |b, buf| {
 			b == b'c'
 				&& buf.contains(&0x1b)
 				&& buf.rsplitn(2, |&b| b == 0x1b).next().is_some_and(|s| s.starts_with(b"[?"))
@@ -115,21 +117,26 @@ impl Emulator {
 
 		h.abort();
 		match result {
-			Ok(()) => debug!("read_until_da1: {buf:?}"),
-			Err(e) => error!("read_until_da1 failed: {buf:?}, error: {e:?}"),
+			Ok(()) => debug!("Terminal responded to DA1 in {:?}: {buf:?}", now.elapsed()),
+			Err(e) => {
+				error!("Terminal failed to respond to DA1 in {:?}: {buf:?}, error: {e:?}", now.elapsed())
+			}
 		}
 
 		String::from_utf8_lossy(&buf).into_owned()
 	}
 
 	pub fn read_until_dsr() -> String {
-		let (buf, result) = AsyncStdin::default().read_until(Duration::from_millis(100), |b, buf| {
+		let now = std::time::Instant::now();
+		let (buf, result) = TTY.read_until(Duration::from_millis(100), |b, buf| {
 			b == b'n' && (buf.ends_with(b"\x1b[0n") || buf.ends_with(b"\x1b[3n"))
 		});
 
 		match result {
-			Ok(()) => debug!("read_until_dsr: {buf:?}"),
-			Err(e) => error!("read_until_dsr failed: {buf:?}, error: {e:?}"),
+			Ok(()) => debug!("Terminal responded to DSR in {:?}: {buf:?}", now.elapsed()),
+			Err(e) => {
+				error!("Terminal failed to respond to DSR in {:?}: {buf:?}, error: {e:?}", now.elapsed())
+			}
 		}
 		String::from_utf8_lossy(&buf).into_owned()
 	}
